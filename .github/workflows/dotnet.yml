@@ -27,11 +27,31 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-nuget-
 
+      - name: Find solution or project
+        id: target
+        shell: bash
+        run: |
+          shopt -s globstar nullglob
+          sols=(**/*.sln)
+          if [ ${#sols[@]} -gt 0 ]; then
+            target="${sols[0]}"
+          else
+            projs=(**/*.csproj)
+            if [ ${#projs[@]} -gt 0 ]; then
+              target="${projs[0]}"
+            else
+              echo "No .sln or .csproj found in repository"; exit 1
+            fi
+          fi
+          echo "target=$target" >> "$GITHUB_OUTPUT"
+          echo "workdir=$(dirname "$target")" >> "$GITHUB_OUTPUT"
+          echo "Using target: $target"
+
       - name: Restore
-        run: dotnet restore
+        run: dotnet restore "${{ steps.target.outputs.target }}"
 
       - name: Build (Release)
-        run: dotnet build --configuration Release --no-restore
+        run: dotnet build "${{ steps.target.outputs.target }}" --configuration Release --no-restore
 
       - name: Discover test projects
         id: tests
@@ -41,7 +61,7 @@ jobs:
           arr=(**/*Tests.csproj)
           echo "found=${#arr[@]}" >> $GITHUB_OUTPUT
           if [ ${#arr[@]} -gt 0 ]; then
-            printf "list=%q " "${arr[@]}" >> $GITHUB_OUTPUT
+            printf "list<<EOF\n%s\nEOF\n" "$(printf "%s\n" "${arr[@]}")" >> $GITHUB_OUTPUT
           fi
 
       - name: Test
@@ -49,11 +69,12 @@ jobs:
         shell: bash
         run: |
           mkdir -p TestResults
-          for proj in ${{ steps.tests.outputs.list }}; do
+          while IFS= read -r proj; do
+            [ -z "$proj" ] && continue
             dotnet test "$proj" --configuration Release --no-build \
               --logger "trx;LogFileName=$(basename "${proj%.*}").trx" \
               --results-directory ./TestResults
-          done
+          done <<< "${{ steps.tests.outputs.list }}"
 
       - name: Upload test results
         if: always() && steps.tests.outputs.found != '0'
