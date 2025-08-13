@@ -8,19 +8,23 @@ namespace OrderHub.Api.Controllers
     [Route("api/[controller]")]
     public class OrdersController : ControllerBase
     {
+        private readonly OrderService _orderService;
+
+        public OrdersController(OrderService orderService)
+        {
+            _orderService = orderService;
+        }
         [HttpPost]
         public async Task<IActionResult> PlaceOrder([FromBody] CreateOrderDto dto)
         {
-            var svc = new OrderService();
-            var result = await svc.PlaceOrderAsync(dto);
+            var result = await _orderService.PlaceOrderAsync(dto);
             return Ok(result);
         }
 
         [HttpGet]
         public IActionResult GetAll()
         {
-            var svc = new OrderService();
-            return Ok(svc.GetAllOrders());
+            return Ok(_orderService.GetAllOrders());
         }
     }
 }
